@@ -27,6 +27,8 @@ class TelnetClient:
         auto_reconnect: bool = True,
         reconnect_interval: int = 10,
         timeout: int = 10,
+        disconnect_callback: Callable | None = None,  # type: ignore
+        connect_callback: Callable | None = None,  # type: ignore
     ):
         """Initialize a TelnetClient instance.
 
@@ -50,6 +52,10 @@ class TelnetClient:
                 (default: 10). Applied both during connection loss and between retries.
             timeout: The timeout in seconds for establishing a connection (default: 10).
                 Used to prevent indefinite hanging on connection attempts.
+            disconnect_callback: Optional callable to be invoked upon disconnection.
+                Signature: () -> None
+            connect_callback: Optional callable to be invoked upon successful connection.
+                Signature: () -> None
         """
         self.host: str = host
         self.port = port
@@ -58,6 +64,8 @@ class TelnetClient:
         self.reconnect_task = None
         self.listener_task = None
         self.message_handler: Callable | None = message_handler  # type: ignore
+        self.connect_callback: Callable | None = connect_callback  # type: ignore
+        self.disconnect_callback: Callable | None = disconnect_callback  # type: ignore
         self.break_line = break_line
         self.reconnect_interval = reconnect_interval
         self.encoding = encoding
@@ -99,6 +107,12 @@ class TelnetClient:
             if self.auto_reconnect and (self.reconnect_task is None or self.reconnect_task.done()):
                 self.reconnect_task = asyncio.create_task(self._reconnect_task())
             self._is_connected = True
+            if self.connect_callback:
+                if asyncio.iscoroutinefunction(self.connect_callback):
+                    await self.connect_callback()  # type: ignore
+                elif self.connect_callback:
+                    self.connect_callback()  # type: ignore
+            _LOGGER.debug("Successfully connected to Telnet server at %s:%s", self.host, self.port)
         except (OSError, asyncio.TimeoutError) as e:
             self._is_connected = False
             raise ConnectionError(f"Failed to connect to {self.host}:{self.port}") from e
@@ -197,6 +211,11 @@ class TelnetClient:
             await self.writer.wait_closed()
         self.writer = None
         self.reader = None
+        if self.disconnect_callback:
+            if asyncio.iscoroutinefunction(self.disconnect_callback):
+                await self.disconnect_callback()  # type: ignore
+            elif self.disconnect_callback:
+                self.disconnect_callback()  # type: ignore
 
     async def _reconnect_task(self) -> None:
         """Background task that handles automatic reconnection to the Telnet server.
@@ -221,6 +240,11 @@ class TelnetClient:
         await asyncio.sleep(self.reconnect_interval)  # Initial delay
         while True:
             if not self.is_connected():
+                if self.disconnect_callback:
+                    if asyncio.iscoroutinefunction(self.disconnect_callback):
+                        await self.disconnect_callback()  # type: ignore
+                    elif self.disconnect_callback:
+                        self.disconnect_callback()  # type: ignore
                 _LOGGER.debug("Reconnecting to Telnet server at %s:%s", self.host, self.port)
                 try:
                     await self.connect()
