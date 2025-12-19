@@ -3,29 +3,24 @@ requires = ["flit_core >=2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name =  "py-project-toml"
+name =  "pytelnet"
 authors = [
-    {name = "Daniel Ciborowski", email = "dciborow@microsoft.com"},
+    {name = "Jordan Harvey", email = "jordan@hrvy.uk"},
 ]
-description = "Sample Python Project for creating a new Python Module"
+description = "A generic asyncio Python package to use telnet."
 readme = "README.md"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11"
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"
 ]
-requires-python = ">=3.8.1"
+requires-python = ">=3.13.0"
 dynamic = ["version"]
 
 [project.optional-dependencies]
-spark = [
-    "pyspark>=3.0.0"
-]
 test = [
     "bandit[toml]==1.7.5",
     "black==23.3.0",
@@ -38,21 +33,22 @@ test = [
     "pre-commit==3.3.1",
     "pylint==2.17.4",
     "pylint_junit",
-    "pytest-cov==4.0.0",
-    "pytest-mock<3.10.1",
+    "pytest-cov==7.0.0",
+    "pytest-mock>=3.14.0",
     "pytest-runner",
-    "pytest==7.3.1",
+    "pytest-asyncio",
+    "pytest>=8.0.0",
     "pytest-github-actions-annotate-failures",
     "shellcheck-py==0.9.0.2"
 ]
 
 [project.urls]
-Documentation = "https://github.com/microsoft/python-package-template/tree/main#readme"
-Source = "https://github.com/microsoft/python-package-template"
-Tracker = "https://github.com/microsoft/python-package-template/issues"
+Documentation = "https://github.com/pantherale0/pytelnet"
+Source = "https://github.com/pantherale0/pytelnet"
+Tracker = "https://github.com/pantherale0/pytelnet/issues"
 
 [tool.flit.module]
-name = "python_package"
+name = "pytelnet"
 
 [tool.bandit]
 exclude_dirs = ["build","dist","tests","scripts"]
@@ -111,7 +107,7 @@ executionEnvironments = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--cov-report xml:coverage.xml --cov src --cov-fail-under 0 --cov-append -m 'not integration'"
+addopts = "--cov-report xml:coverage.xml --cov-report term-missing --cov src --cov-fail-under 0 --cov-append -m 'not integration'"
 pythonpath = [
   "src"
 ]
@@ -120,38 +116,26 @@ junit_family = "xunit2"
 markers = [
     "integration: marks as integration test",
     "notebooks: marks as notebook test",
-    "gpu: marks as gpu test",
-    "spark: marks tests which need Spark",
     "slow: marks tests as slow",
     "unit: fast offline tests",
 ]
+asyncio_mode = "auto"
 
 [tool.tox]
 legacy_tox_ini = """
 [tox]
-envlist = py, integration, spark, all
+envlist = py, integration, all
 
 [testenv]
 commands =
-    pytest -m "not integration and not spark" {posargs}
+    pytest -m "not integration" {posargs}
 
 [testenv:integration]
 commands =
     pytest -m "integration" {posargs}
 
-[testenv:spark]
-extras = spark
-setenv =
-       PYSPARK_DRIVER_PYTHON = {envpython}
-       PYSPARK_PYTHON = {envpython}
-commands =
-    pytest -m "spark" {posargs}
-
 [testenv:all]
 extras = all
-setenv =
-       PYSPARK_DRIVER_PYTHON = {envpython}
-       PYSPARK_PYTHON = {envpython}
 commands =
     pytest {posargs}
 """
@@ -252,7 +236,7 @@ check-str-concat-over-line-jumps="no"
 
 [tool.pylint.'TYPECHECK']
 contextmanager-decorators="contextlib.contextmanager"
-generated-members="numpy.*,np.*,pyspark.sql.functions,collect_list"
+generated-members="numpy.*,np.*,collect_list"
 ignore-mixin-members="yes"
 ignore-none="yes"
 ignore-on-opaque-inference="yes"
