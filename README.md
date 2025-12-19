@@ -4,6 +4,8 @@ PyTelnet is a lightweight, asynchronous Telnet client for Python, designed for e
 
 Notice: AI has been used to generate parts of this project. It has been checked against Python documentation for correctness.
 
+This project was born due to the lack of standard async telnet library, while it has been built primarily for telnet usage, it could also be used for any kind of low-level server/client network communication.
+
 ## Features
 
 - **Asynchronous:** Built on `asyncio` for non-blocking network I/O.
