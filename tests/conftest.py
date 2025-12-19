@@ -47,18 +47,27 @@ def telnet_client_factory(event_loop: asyncio.AbstractEventLoop) -> Callable[...
 
 
 @pytest.fixture
-async def connected_telnet_client(telnet_client_factory):
+async def mock_reader_writer():
+    """Fixture to provide mocked StreamReader and StreamWriter."""
+    mock_reader = AsyncMock()
+    mock_reader.readuntil.side_effect = asyncio.CancelledError()
+    mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
+    mock_writer.is_closing.return_value = False
+    mock_writer.drain = AsyncMock()
+    mock_writer.wait_closed = AsyncMock()
+    return mock_reader, mock_writer
+
+
+@pytest.fixture
+async def connected_telnet_client(
+    telnet_client_factory,
+    mock_reader_writer,
+):
     """Fixture providing a connected TelnetClient with mocked connection."""
     client = telnet_client_factory(host="localhost", port=12345, auto_reconnect=False)
 
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open_connection:
-        mock_reader = AsyncMock()
-        mock_reader.readuntil.side_effect = asyncio.CancelledError()
-        mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-        mock_writer.is_closing.return_value = False
-        mock_writer.drain = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
-        mock_open_connection.return_value = (mock_reader, mock_writer)
+        mock_open_connection.return_value = mock_reader_writer
 
         await client.connect()
         yield client

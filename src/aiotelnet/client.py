@@ -115,7 +115,12 @@ class TelnetClient:
             _LOGGER.debug("Successfully connected to Telnet server at %s:%s", self.host, self.port)
         except (OSError, asyncio.TimeoutError) as e:
             self._is_connected = False
-            raise ConnectionError(f"Failed to connect to {self.host}:{self.port}") from e
+            if self.auto_reconnect:
+                if self.reconnect_task is None or self.reconnect_task.done():
+                    self.reconnect_task = asyncio.create_task(self._reconnect_task())
+                _LOGGER.error("Failed to connect to Telnet server at %s:%s - %s", self.host, self.port, e)
+            else:
+                raise ConnectionError(f"Failed to connect to {self.host}:{self.port}") from e
 
     def is_connected(self) -> bool:
         """Check if the client is currently connected to the server.
@@ -255,6 +260,10 @@ class TelnetClient:
                 except asyncio.CancelledError:
                     _LOGGER.debug("Reconnection task cancelled for Telnet server at %s:%s", self.host, self.port)
                     break
+                else:
+                    self._is_connected = True
+                    _LOGGER.debug("Successfully reconnected to Telnet server at %s:%s", self.host, self.port)
+
             await asyncio.sleep(self.reconnect_interval)
 
     async def _listener_task(self) -> None:
