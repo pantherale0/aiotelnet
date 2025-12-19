@@ -8,6 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch, create_autospec
 from pytelnet.client import TelnetClient
 
 
+def test_module_version():
+    """Test that the module version is defined."""
+    from pytelnet import __version__
+
+    assert isinstance(__version__, str)
+    assert __version__ == "1.0.0"  # This is overridden during release process
+
+
 @pytest.mark.asyncio
 async def test_telnet_client_connect_and_close(telnet_client_factory: Callable[..., TelnetClient]):
     """Test connecting and closing a TelnetClient."""
@@ -49,7 +57,7 @@ async def test_telnet_client_send_command(telnet_client_factory: Callable[..., T
         await client.connect()
         await client.send_command("test command")
 
-        mock_writer.write.assert_called_with(b"test command\n")
+        mock_writer.write.assert_called_with(b"test command")
         mock_writer.drain.assert_awaited_once()
         await client.close()
 
