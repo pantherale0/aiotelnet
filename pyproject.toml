@@ -3,7 +3,7 @@ requires = ["flit_core >=2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name =  "pytelnet"
+name =  "aiotelnet"
 authors = [
     {name = "Jordan Harvey", email = "jordan@hrvy.uk"},
 ]
@@ -43,12 +43,12 @@ test = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/pantherale0/pytelnet"
-Source = "https://github.com/pantherale0/pytelnet"
-Tracker = "https://github.com/pantherale0/pytelnet/issues"
+Documentation = "https://github.com/pantherale0/aiotelnet"
+Source = "https://github.com/pantherale0/aiotelnet"
+Tracker = "https://github.com/pantherale0/aiotelnet/issues"
 
 [tool.flit.module]
-name = "pytelnet"
+name = "aiotelnet"
 
 [tool.bandit]
 exclude_dirs = ["build","dist","tests","scripts"]

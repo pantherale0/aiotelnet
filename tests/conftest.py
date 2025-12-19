@@ -9,7 +9,7 @@ from typing import Callable
 import pytest
 from unittest.mock import AsyncMock, patch, create_autospec
 
-from pytelnet.client import TelnetClient
+from aiotelnet.client import TelnetClient
 
 
 @pytest.fixture(scope="session")

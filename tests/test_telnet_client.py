@@ -5,12 +5,12 @@ from typing import Callable
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, create_autospec
 
-from pytelnet.client import TelnetClient
+from aiotelnet.client import TelnetClient
 
 
 def test_module_version():
     """Test that the module version is defined."""
-    from pytelnet import __version__
+    from aiotelnet import __version__
 
     assert isinstance(__version__, str)
     assert __version__ == "1.0.0"  # This is overridden during release process

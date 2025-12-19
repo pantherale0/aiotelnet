@@ -1,6 +1,6 @@
-# PyTelnet: Async Telnet Client
+# aiotelnet: Async Telnet Client
 
-PyTelnet is a lightweight, asynchronous Telnet client for Python, designed for easy integration into modern async applications.
+aiotelnet is a lightweight, asynchronous Telnet client for Python, designed for easy integration into modern async applications.
 
 Notice: AI has been used to generate parts of this project. It has been checked against Python documentation for correctness.
 
@@ -16,7 +16,7 @@ This project was born due to the lack of standard async telnet library, while it
 ## Installation
 
 ```bash
-pip install pytelnet
+pip install aiotelnet
 ```
 
 ## Usage
@@ -26,7 +26,7 @@ Here's a basic example of how to use `TelnetClient` to connect to a Telnet serve
 ```python
 import asyncio
 
-from pytelnet.client import TelnetClient
+from aiotelnet.client import TelnetClient
 
 
 # Define a message handler
