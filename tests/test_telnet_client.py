@@ -2,6 +2,7 @@
 
 import asyncio
 from typing import Callable
+from copy import deepcopy
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, create_autospec
 
@@ -17,17 +18,15 @@ def test_module_version():
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_connect_and_close(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_connect_and_close(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test connecting and closing a TelnetClient."""
     client = telnet_client_factory(host="localhost", port=12345, auto_reconnect=False)
 
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open_connection:
-        mock_reader = AsyncMock()
-        mock_reader.readuntil.side_effect = asyncio.CancelledError()
-        mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-        mock_writer.is_closing.return_value = False
-        mock_writer.drain = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
+        mock_reader, mock_writer = mock_reader_writer
         mock_open_connection.return_value = (mock_reader, mock_writer)
 
         await client.connect()
@@ -41,17 +40,15 @@ async def test_telnet_client_connect_and_close(telnet_client_factory: Callable[.
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_send_command(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_send_command(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test sending a command with TelnetClient."""
     client = telnet_client_factory(host="localhost", port=12345, auto_reconnect=False)
 
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open_connection:
-        mock_reader = AsyncMock()
-        mock_reader.readuntil.side_effect = asyncio.CancelledError()
-        mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-        mock_writer.is_closing.return_value = False
-        mock_writer.drain = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
+        mock_reader, mock_writer = mock_reader_writer
         mock_open_connection.return_value = (mock_reader, mock_writer)
 
         await client.connect()
@@ -63,7 +60,10 @@ async def test_telnet_client_send_command(telnet_client_factory: Callable[..., T
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_message_handler(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_message_handler(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test the message handler of TelnetClient."""
     mock_message_handler = MagicMock()
     client = telnet_client_factory(
@@ -74,12 +74,11 @@ async def test_telnet_client_message_handler(telnet_client_factory: Callable[...
     )
 
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open_connection:
-        mock_reader = AsyncMock()
-        mock_reader.readuntil.side_effect = [b"hello\n", asyncio.CancelledError()]
-        mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-        mock_writer.is_closing.return_value = False
-        mock_writer.drain = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
+        mock_reader, mock_writer = mock_reader_writer
+        mock_reader.readuntil.side_effect = [
+            b"hello\n",
+            asyncio.CancelledError(),
+        ]
         mock_open_connection.return_value = (mock_reader, mock_writer)
 
         await client.connect()
@@ -90,7 +89,10 @@ async def test_telnet_client_message_handler(telnet_client_factory: Callable[...
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_async_message_handler(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_async_message_handler(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test the message handler of TelnetClient with an async handler."""
     mock_message_handler = AsyncMock()
     client = telnet_client_factory(
@@ -101,15 +103,11 @@ async def test_telnet_client_async_message_handler(telnet_client_factory: Callab
     )
 
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open_connection:
-        mock_reader = AsyncMock()
+        mock_reader, mock_writer = mock_reader_writer
         mock_reader.readuntil.side_effect = [
             b"hello async\n",
             asyncio.CancelledError(),
         ]
-        mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-        mock_writer.is_closing.return_value = False
-        mock_writer.drain = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
         mock_open_connection.return_value = (mock_reader, mock_writer)
 
         await client.connect()
@@ -131,6 +129,38 @@ async def test_telnet_client_connection_error(telnet_client_factory: Callable[..
 
 
 @pytest.mark.asyncio
+async def test_telnet_client_connection_error_auto_reconnect(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
+    """Test that auto_reconnect will contiue to retry connecting to the server."""
+    client = telnet_client_factory(host="localhost", port=12345, auto_reconnect=True, reconnect_interval=0.1)
+
+    with patch("asyncio.open_connection", side_effect=OSError("Connection failed")) as mock_open_connection:
+        # Attempt to connect; should not raise due to auto_reconnect
+        await client.connect()
+        mock_open_connection.assert_called_with("localhost", 12345)
+        assert client.reconnect_task is not None
+        assert client.is_connected() is False
+        # Allow some time for reconnect attempts
+        await asyncio.sleep(0.3)
+        assert mock_open_connection.call_count == 3  # Should have retried connecting three times
+
+        # Test that we can reconnect successfully
+        await asyncio.sleep(0.1)  # Small delay before changing the side effect
+        mock_open_connection.side_effect = None
+        mock_open_connection.return_value = mock_reader_writer
+
+        await client.connect()
+        assert client.is_connected() is True
+        mock_open_connection.assert_called_with("localhost", 12345)
+        assert client.reconnect_task is not None
+        assert mock_open_connection.call_count >= 5 and mock_open_connection.call_count <= 6  # Depending on timing
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_telnet_client_send_command_not_connected(
     disconnected_telnet_client: TelnetClient,
 ):
@@ -140,23 +170,18 @@ async def test_telnet_client_send_command_not_connected(
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_auto_reconnect(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_auto_reconnect(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test the auto-reconnect functionality."""
     client = telnet_client_factory(host="localhost", port=12345, reconnect_interval=0.1, auto_reconnect=True)
 
-    mock_reader_1 = AsyncMock()
+    mock_reader_1, mock_writer_1 = deepcopy(mock_reader_writer)
     mock_reader_1.readuntil.side_effect = ConnectionResetError()
-    mock_writer_1 = create_autospec(asyncio.StreamWriter, instance=True)
-    mock_writer_1.is_closing.return_value = False
-    mock_writer_1.drain = AsyncMock()
-    mock_writer_1.wait_closed = AsyncMock()
 
-    mock_reader_2 = AsyncMock()
+    mock_reader_2, mock_writer_2 = deepcopy(mock_reader_writer)
     mock_reader_2.readuntil.side_effect = asyncio.CancelledError()
-    mock_writer_2 = create_autospec(asyncio.StreamWriter, instance=True)
-    mock_writer_2.is_closing.return_value = False
-    mock_writer_2.drain = AsyncMock()
-    mock_writer_2.wait_closed = AsyncMock()
 
     # First connection succeeds, then we'll simulate a disconnect
     mock_open_connection = AsyncMock(
@@ -274,18 +299,15 @@ async def test_telnet_client_listener_task_incomplete_read_error(telnet_client_f
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_listener_task_reader_none(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_listener_task_reader_none(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test listener task handles reader being None."""
     client = telnet_client_factory(host="localhost", port=12345, auto_reconnect=False)
 
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open_connection:
-        mock_reader = AsyncMock()
-        mock_reader.readuntil.side_effect = asyncio.CancelledError()
-        mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-        mock_writer.is_closing.return_value = False
-        mock_writer.drain = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
-        mock_open_connection.return_value = (mock_reader, mock_writer)
+        mock_open_connection.return_value = mock_reader_writer
 
         await client.connect()
         # Clear reader to test the None check in listener task
@@ -296,25 +318,20 @@ async def test_telnet_client_listener_task_reader_none(telnet_client_factory: Ca
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_reconnect_task_connection_error_retry(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_reconnect_task_connection_error_retry(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test reconnect task retries on ConnectionError during listener operation."""
     client = telnet_client_factory(host="localhost", port=12345, reconnect_interval=0.05, auto_reconnect=True)
 
     # First setup a successful connection
-    mock_reader_1 = AsyncMock()
+    mock_reader_1, mock_writer_1 = deepcopy(mock_reader_writer)
     mock_reader_1.readuntil.side_effect = ConnectionResetError()
-    mock_writer_1 = create_autospec(asyncio.StreamWriter, instance=True)
-    mock_writer_1.is_closing.return_value = False
-    mock_writer_1.drain = AsyncMock()
-    mock_writer_1.wait_closed = AsyncMock()
 
     # Second connection after reconnect
-    mock_reader_2 = AsyncMock()
+    mock_reader_2, mock_writer_2 = deepcopy(mock_reader_writer)
     mock_reader_2.readuntil.side_effect = asyncio.CancelledError()
-    mock_writer_2 = create_autospec(asyncio.StreamWriter, instance=True)
-    mock_writer_2.is_closing.return_value = False
-    mock_writer_2.drain = AsyncMock()
-    mock_writer_2.wait_closed = AsyncMock()
 
     mock_open_connection = AsyncMock(
         side_effect=[
@@ -338,17 +355,16 @@ async def test_telnet_client_reconnect_task_connection_error_retry(telnet_client
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_listener_task_no_message_handler(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_listener_task_no_message_handler(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test listener task with no message handler."""
     client = telnet_client_factory(host="localhost", port=12345, message_handler=None, auto_reconnect=False)
 
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open_connection:
-        mock_reader = AsyncMock()
+        mock_reader, mock_writer = mock_reader_writer
         mock_reader.readuntil.side_effect = [b"test\n", asyncio.CancelledError()]
-        mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-        mock_writer.is_closing.return_value = False
-        mock_writer.drain = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
         mock_open_connection.return_value = (mock_reader, mock_writer)
 
         await client.connect()
@@ -360,19 +376,15 @@ async def test_telnet_client_listener_task_no_message_handler(telnet_client_fact
 @pytest.mark.asyncio
 async def test_telnet_client_listener_task_no_auto_reconnect_on_disconnect(
     telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
 ):
     """Test listener task breaks when disconnected with auto_reconnect disabled."""
     client = telnet_client_factory(host="localhost", port=12345, auto_reconnect=False)
 
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open_connection:
-        mock_reader = AsyncMock()
+        mock_reader, mock_writer = mock_reader_writer
         # Raise ConnectionResetError to trigger the break in listener task
         mock_reader.readuntil.side_effect = ConnectionResetError()
-        mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-        mock_writer.is_closing.return_value = False
-        mock_writer.close = MagicMock()
-        mock_writer.drain = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
         mock_open_connection.return_value = (mock_reader, mock_writer)
 
         await client.connect()
@@ -389,7 +401,10 @@ async def test_telnet_client_listener_task_no_auto_reconnect_on_disconnect(
 
 
 @pytest.mark.asyncio
-async def test_telnet_client_reconnect_connection_error_caught(telnet_client_factory: Callable[..., TelnetClient]):
+async def test_telnet_client_reconnect_connection_error_caught(
+    telnet_client_factory: Callable[..., TelnetClient],
+    mock_reader_writer,
+):
     """Test reconnect task catches ConnectionError and continues."""
     client = telnet_client_factory(host="localhost", port=12345, reconnect_interval=0.05, auto_reconnect=True)
 
@@ -400,23 +415,15 @@ async def test_telnet_client_reconnect_connection_error_caught(telnet_client_fac
         call_count += 1
         # First call succeeds, second call (reconnect after disconnect) fails, third succeeds
         if call_count == 1:
-            mock_reader = AsyncMock()
+            mock_reader, mock_writer = mock_reader_writer
             mock_reader.readuntil.side_effect = ConnectionResetError()
-            mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-            mock_writer.is_closing.return_value = False
             mock_writer.close = MagicMock()
-            mock_writer.drain = AsyncMock()
-            mock_writer.wait_closed = AsyncMock()
             return (mock_reader, mock_writer)
         elif call_count == 2:
             raise OSError("Reconnect failed")
         else:
-            mock_reader = AsyncMock()
+            mock_reader, mock_writer = mock_reader_writer
             mock_reader.readuntil.side_effect = asyncio.CancelledError()
-            mock_writer = create_autospec(asyncio.StreamWriter, instance=True)
-            mock_writer.is_closing.return_value = False
-            mock_writer.drain = AsyncMock()
-            mock_writer.wait_closed = AsyncMock()
             return (mock_reader, mock_writer)
 
     with patch("asyncio.open_connection", side_effect=mock_open_connection_side_effect):
