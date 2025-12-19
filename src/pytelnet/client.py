@@ -21,6 +21,8 @@ class TelnetClient:
         port: int = 23,
         message_handler: Callable | None = None,  # type: ignore
         break_line: bytes = b"\n",
+        command_prefix: str = "",
+        command_suffix: str = "",
         encoding: str = "utf-8",
         auto_reconnect: bool = True,
         reconnect_interval: int = 10,
@@ -36,6 +38,10 @@ class TelnetClient:
                 Signature: (message: bytes) -> None or Awaitable[None]
             break_line: The byte sequence that separates messages (default: b'\\n').
                 Used to determine message boundaries when reading from the server.
+            command_prefix: A string to prepend to every command sent to the server
+                (default: ''). Useful for adding protocol-specific prefixes.
+            command_suffix: A string to append to every command sent to the server
+                (default: ''). Useful for adding protocol-specific suffixes like newlines.
             encoding: The character encoding to use for command strings (default: 'utf-8').
                 Used when encoding commands to bytes before sending.
             auto_reconnect: Whether to automatically reconnect if the connection is lost
@@ -57,6 +63,8 @@ class TelnetClient:
         self.encoding = encoding
         self.auto_reconnect = auto_reconnect
         self.timeout = timeout
+        self.command_prefix = command_prefix
+        self.command_suffix = command_suffix
         self._is_connected = False
 
     async def connect(self) -> None:
@@ -97,11 +105,11 @@ class TelnetClient:
 
     def is_connected(self) -> bool:
         """Check if the client is currently connected to the server.
-        
+
         Returns:
             bool: True if the client is connected and the writer is not closing,
                 False otherwise.
-        
+
         Note:
             This method checks both the internal connection state and the
             underlying writer's closing status to ensure accuracy.
@@ -110,37 +118,46 @@ class TelnetClient:
 
     async def send_command(self, command: str) -> None:
         """Send a command to the Telnet server.
-        
-        Encodes the command using the configured encoding and sends it to the
-        server with a newline terminator. The command is automatically appended
-        with a newline character (b'\\n').
-        
+
+        Encodes the command using the configured encoding and sends it to the server.
+        The command_prefix and command_suffix are automatically prepended and appended
+        to the command before transmission.
+
+        The final command format is: prefix + command + suffix
+
         Args:
             command: The command string to send to the Telnet server.
-        
+
         Raises:
             ConnectionError: If the client is not currently connected to the server.
-        
+
         Note:
             - To receive responses from the server, a message_handler must be
               provided when initializing the client.
             - The command is automatically encoded using the configured encoding.
-            - A newline is automatically appended to the command.
+            - The configured command_prefix and command_suffix are automatically
+              applied to every command sent (set these during initialization).
             - This method will wait until the data is flushed to the server.
-        
+
         Example:
+            # Without prefix/suffix:
+            client = TelnetClient('localhost', 23)
             await client.send_command('hello')
+
+            # With prefix and suffix:
+            client = TelnetClient('localhost', 23, command_prefix='>', command_suffix='\\n')
+            await client.send_command('hello')  # Sends: '>hello\\n'
         """
         _LOGGER.debug("Sending command to Telnet server %s:%s - %s", self.host, self.port, command)
         if self.writer is None or self.reader is None:
             raise ConnectionError("Not connected to the server.")
-
-        self.writer.write(command.encode(self.encoding) + b"\n")
+        command = f"{self.command_prefix}{command}{self.command_suffix}"
+        self.writer.write(command.encode(self.encoding))
         await self.writer.drain()
 
     async def close(self) -> None:
         """Close the connection to the Telnet server.
-        
+
         Gracefully closes the Telnet connection by:
         - Setting the connection state to closed
         - Disabling automatic reconnection to prevent reconnect attempts
@@ -148,13 +165,13 @@ class TelnetClient:
         - Cancelling the listener task if running
         - Closing the writer and waiting for it to fully close
         - Clearing reader and writer references
-        
+
         Note:
             - This method is safe to call multiple times
             - All background tasks are properly cancelled and awaited
             - No exceptions are raised if the connection is already closed
             - This is an async method and must be called with await
-        
+
         Example:
             await client.close()
         """
@@ -183,18 +200,18 @@ class TelnetClient:
 
     async def _reconnect_task(self) -> None:
         """Background task that handles automatic reconnection to the Telnet server.
-        
+
         This is an internal method that runs continuously as a background task when
         auto_reconnect is enabled. It monitors the connection state and attempts
         to reconnect if the connection is lost.
-        
+
         Behavior:
         - Waits for the configured reconnect_interval before checking connection status
         - Attempts to reconnect if the connection is detected as lost
         - Catches and logs ConnectionError exceptions without stopping the task
         - Sleeps between reconnection attempts to avoid excessive CPU usage
         - Can be cancelled via asyncio.CancelledError (handled internally)
-        
+
         Note:
             - This task is automatically created and managed by the connect() method
             - Should not be called directly by users
@@ -218,11 +235,11 @@ class TelnetClient:
 
     async def _listener_task(self) -> None:
         """Background task that continuously listens for incoming messages from the server.
-        
+
         This is an internal method that runs continuously as a background task after
         a successful connection. It reads messages from the server and dispatches them
         to the configured message_handler.
-        
+
         Behavior:
         - Waits for the configured break_line sequence to identify message boundaries
         - Calls the message_handler (if configured) with each received message
@@ -230,12 +247,12 @@ class TelnetClient:
         - Handles connection drops and errors gracefully
         - Clears connection state when disconnected, triggering reconnection logic
         - Stops listening if auto_reconnect is disabled after a disconnection
-        
+
         Error Handling:
         - asyncio.IncompleteReadError: Connection closed unexpectedly, clears reader/writer
         - ConnectionResetError: Server forcibly closed connection, clears reader/writer
         - asyncio.CancelledError: Task was explicitly cancelled, breaks the loop cleanly
-        
+
         Note:
             - This task is automatically created and managed by the connect() method
             - Should not be called directly by users
