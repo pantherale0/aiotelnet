@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[dev]
+          pip install .[test]
       - name: Test with pytest
         run: |
           pytest --cov=pynintendoparental --cov-branch --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
