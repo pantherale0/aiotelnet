@@ -1,5 +1,7 @@
 # aiotelnet: Async Telnet Client
 
+**This module is unsupported, use `serialx` instead**
+
 aiotelnet is a lightweight, asynchronous Telnet client for Python, designed for easy integration into modern async applications.
 
 Notice: AI has been used to generate parts of this project. It has been checked against Python documentation for correctness.
